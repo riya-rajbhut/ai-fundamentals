@@ -1,75 +1,109 @@
+
 import torch
-import torchvision
-from torchvision import datasets, transforms
 import torch.optim as optim
+from torchvision import datasets, transforms
 
 print("PyTorch Version:", torch.__version__)
 
-# -----------------------------
-# DATASET LOADING
-# -----------------------------
-transform = transforms.ToTensor()
+# ==========================================================
+# TRANSFORMS
+# ==========================================================
+basic_transform = transforms.ToTensor()
 
-dataset = datasets.CIFAR10(
+normalized_transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize(
+        (0.4914, 0.4822, 0.4465),
+        (0.2470, 0.2435, 0.2616)
+    )
+])
+
+# ==========================================================
+# HELPER FUNCTION TO FILTER CATS AND DOGS
+# CIFAR-10 labels:
+# 3 = cat -> 0
+# 5 = dog -> 1
+# ==========================================================
+def create_cat_dog_dataset(dataset):
+    filtered = []
+
+    for image, label in dataset:
+        if label in [3, 5]:
+            filtered.append(
+                (image, 0 if label == 3 else 1)
+            )
+
+    return filtered
+
+# ==========================================================
+# LOAD DATASETS
+# ==========================================================
+train_dataset = datasets.CIFAR10(
     root="./data",
     train=True,
-    transform=transform,
+    transform=basic_transform,
     download=True
 )
 
 test_dataset = datasets.CIFAR10(
     root="./data",
     train=False,
-    transform=transform,
+    transform=basic_transform,
     download=True
 )
 
-print("Total images in CIFAR-10:", len(dataset))
-print("Classes:", dataset.classes)
+norm_train_dataset = datasets.CIFAR10(
+    root="./data",
+    train=True,
+    transform=normalized_transform,
+    download=True
+)
 
-# -----------------------------
-# FILTER CATS AND DOGS
-# Cat = 0, Dog = 1
-# -----------------------------
-cat_dog_dataset = []
+norm_test_dataset = datasets.CIFAR10(
+    root="./data",
+    train=False,
+    transform=normalized_transform,
+    download=True
+)
 
-for img, lbl in dataset:
-    if lbl in [3, 5]:
-        cat_dog_dataset.append(
-            (img, 0 if lbl == 3 else 1)
-        )
+cat_dog_train = create_cat_dog_dataset(train_dataset)
+cat_dog_test = create_cat_dog_dataset(test_dataset)
 
-cat_dog_test_dataset = []
+norm_cat_dog_train = create_cat_dog_dataset(norm_train_dataset)
+norm_cat_dog_test = create_cat_dog_dataset(norm_test_dataset)
 
-for img, lbl in test_dataset:
-    if lbl in [3, 5]:
-        cat_dog_test_dataset.append(
-            (img, 0 if lbl == 3 else 1)
-        )
+print("Training samples:", len(cat_dog_train))
+print("Testing samples:", len(cat_dog_test))
 
-print("Training Cat/Dog Images:", len(cat_dog_dataset))
-print("Testing Cat/Dog Images:", len(cat_dog_test_dataset))
-
-loader = torch.utils.data.DataLoader(
-    cat_dog_dataset,
+# ==========================================================
+# DATALOADERS
+# ==========================================================
+train_loader = torch.utils.data.DataLoader(
+    cat_dog_train,
     batch_size=64,
     shuffle=True
 )
 
 test_loader = torch.utils.data.DataLoader(
-    cat_dog_test_dataset,
+    cat_dog_test,
     batch_size=64,
     shuffle=False
 )
 
-image_batch, label_batch = next(iter(loader))
+norm_train_loader = torch.utils.data.DataLoader(
+    norm_cat_dog_train,
+    batch_size=64,
+    shuffle=True
+)
 
-print("Batch Image Shape:", image_batch.shape)
-print("Batch Label Shape:", label_batch.shape)
-
+norm_test_loader = torch.utils.data.DataLoader(
+    norm_cat_dog_test,
+    batch_size=64,
+    shuffle=False
+)
 
 # ==========================================================
-# MLP MODEL
+# MODELS
 # ==========================================================
 class CatDogMLP(torch.nn.Module):
     def __init__(self):
@@ -89,38 +123,20 @@ class CatDogMLP(torch.nn.Module):
         return self.network(x)
 
 
-# ==========================================================
-# CNN MODEL
-# ==========================================================
 class CatDogCNN(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
         self.conv_layers = torch.nn.Sequential(
-            torch.nn.Conv2d(
-                in_channels=3,
-                out_channels=16,
-                kernel_size=3,
-                padding=1
-            ),
+            torch.nn.Conv2d(3, 16, 3, padding=1),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2),
 
-            torch.nn.Conv2d(
-                in_channels=16,
-                out_channels=32,
-                kernel_size=3,
-                padding=1
-            ),
+            torch.nn.Conv2d(16, 32, 3, padding=1),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2),
 
-            torch.nn.Conv2d(
-                in_channels=32,
-                out_channels=64,
-                kernel_size=3,
-                padding=1
-            ),
+            torch.nn.Conv2d(32, 64, 3, padding=1),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2)
         )
@@ -195,7 +211,7 @@ def train_model(
 # ==========================================================
 def evaluate_model(
     model,
-    test_loader,
+    loader,
     criterion,
     flatten=False
 ):
@@ -208,7 +224,7 @@ def evaluate_model(
 
     with torch.no_grad():
 
-        for images, labels in test_loader:
+        for images, labels in loader:
 
             if flatten:
                 images = images.view(
@@ -234,11 +250,9 @@ def evaluate_model(
 
             total += labels.size(0)
 
-    avg_loss = total_loss / len(test_loader)
+    accuracy = (correct / total) * 100
 
-    accuracy = (
-        correct / total
-    ) * 100
+    avg_loss = total_loss / len(loader)
 
     return accuracy, avg_loss
 
@@ -246,10 +260,10 @@ def evaluate_model(
 criterion = torch.nn.BCEWithLogitsLoss()
 
 # ==========================================================
-# TRAIN MLP
+# MODEL 1: MLP
 # ==========================================================
 print("\n" + "=" * 50)
-print("TRAINING MLP")
+print("MODEL 1: MLP")
 print("=" * 50)
 
 mlp_model = CatDogMLP()
@@ -261,7 +275,7 @@ optimizer = optim.Adam(
 
 train_model(
     mlp_model,
-    loader,
+    train_loader,
     criterion,
     optimizer,
     epochs=30,
@@ -275,23 +289,13 @@ mlp_accuracy, mlp_loss = evaluate_model(
     flatten=True
 )
 
-print("\nMLP TEST RESULTS")
-print(f"Loss     : {mlp_loss:.4f}")
-print(f"Accuracy : {mlp_accuracy:.2f}%")
-
-mlp_params = sum(
-    p.numel()
-    for p in mlp_model.parameters()
-)
-
-print("MLP Parameters:", mlp_params)
-
+print(f"MLP Accuracy: {mlp_accuracy:.2f}%")
 
 # ==========================================================
-# TRAIN CNN
+# MODEL 2: CNN
 # ==========================================================
 print("\n" + "=" * 50)
-print("TRAINING CNN")
+print("MODEL 2: CNN")
 print("=" * 50)
 
 cnn_model = CatDogCNN()
@@ -303,7 +307,7 @@ optimizer = optim.Adam(
 
 train_model(
     cnn_model,
-    loader,
+    train_loader,
     criterion,
     optimizer,
     epochs=30,
@@ -317,17 +321,62 @@ cnn_accuracy, cnn_loss = evaluate_model(
     flatten=False
 )
 
-print("\nCNN TEST RESULTS")
-print(f"Loss     : {cnn_loss:.4f}")
-print(f"Accuracy : {cnn_accuracy:.2f}%")
+print(f"CNN Accuracy: {cnn_accuracy:.2f}%")
+
+# ==========================================================
+# MODEL 3: CNN + NORMALIZATION
+# ==========================================================
+print("\n" + "=" * 50)
+print("MODEL 3: CNN + NORMALIZATION")
+print("=" * 50)
+
+cnn_norm_model = CatDogCNN()
+
+optimizer = optim.Adam(
+    cnn_norm_model.parameters(),
+    lr=0.001
+)
+
+train_model(
+    cnn_norm_model,
+    norm_train_loader,
+    criterion,
+    optimizer,
+    epochs=75,
+    flatten=False
+)
+
+cnn_norm_accuracy, cnn_norm_loss = evaluate_model(
+    cnn_norm_model,
+    norm_test_loader,
+    criterion,
+    flatten=False
+)
+
+print(
+    f"CNN + Normalization Accuracy - With 30 epochs: 74.85%. Which is decreased, hence epochs increased to 75 steps now"
+
+    f"CNN + Normalization Accuracy + increased Epochs: "
+    f"{cnn_norm_accuracy:.2f}%"
+)
+
+# ==========================================================
+# PARAMETER COUNTS
+# ==========================================================
+mlp_params = sum(
+    p.numel()
+    for p in mlp_model.parameters()
+)
 
 cnn_params = sum(
     p.numel()
     for p in cnn_model.parameters()
 )
 
-print("CNN Parameters:", cnn_params)
-
+print("\nParameter Counts")
+print("----------------")
+print("MLP :", mlp_params)
+print("CNN :", cnn_params)
 
 # ==========================================================
 # FINAL COMPARISON
@@ -337,14 +386,35 @@ print("FINAL COMPARISON")
 print("=" * 50)
 
 print(
-    f"MLP Accuracy : {mlp_accuracy:.2f}%"
+    f"MLP Accuracy                 : "
+    f"{mlp_accuracy:.2f}%"
 )
 
 print(
-    f"CNN Accuracy : {cnn_accuracy:.2f}%"
+    f"CNN Accuracy                 : "
+    f"{cnn_accuracy:.2f}%"
 )
 
 print(
-    f"Improvement  : "
+    f"CNN + Normalization Accuracy : "
+    f"{cnn_norm_accuracy:.2f}%"
+)
+
+print()
+
+print(
+    f"CNN Improvement              : "
     f"{cnn_accuracy - mlp_accuracy:.2f}%"
 )
+
+print(
+    f"Normalization Improvement    : "
+    f"{cnn_norm_accuracy - cnn_accuracy:.2f}%"
+)
+
+print(
+    f"Overall Improvement          : "
+    f"{cnn_norm_accuracy - mlp_accuracy:.2f}%"
+)
+
+print("=" * 50)
