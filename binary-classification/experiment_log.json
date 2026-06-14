@@ -1,0 +1,26 @@
+[
+    {
+        "name": "CNN Baseline",
+        "accuracy": 70.53,
+        "epochs": 30,
+        "learning_rate": 0.001,
+        "augmentation": false,
+        "normalization": false
+    },
+    {
+        "name": "CNN + Normalization",
+        "accuracy": 70.87,
+        "epochs": 30,
+        "learning_rate": 0.001,
+        "augmentation": false,
+        "normalization": true
+    },
+    {
+        "name": "CNN + Norm + Augmentation",
+        "accuracy": 75.45,
+        "epochs": 30,
+        "learning_rate": 0.001,
+        "augmentation": true,
+        "normalization": true
+    }
+]

@@ -30,3 +30,8 @@ CNN Improvement              : 12.35%
 Normalization Improvement    : 1.40%
 Overall Improvement          : 13.75%
 ==================================================
+Generating report...
+                        name  accuracy  epochs  learning_rate  augmentation  normalization  improvement
+2  CNN + Norm + Augmentation     75.45      30          0.001          True           True         4.92
+1        CNN + Normalization     70.87      30          0.001         False           True         0.34
+0               CNN Baseline     70.53      30          0.001         False          False         0.00
