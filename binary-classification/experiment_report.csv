@@ -1,0 +1,4 @@
+name,accuracy,epochs,learning_rate,augmentation,normalization,improvement
+CNN + Norm + Augmentation,75.45,30,0.001,True,True,4.920000000000002
+CNN + Normalization,70.87,30,0.001,False,True,0.3400000000000034
+CNN Baseline,70.53,30,0.001,False,False,0.0
